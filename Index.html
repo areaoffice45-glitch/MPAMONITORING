@@ -1,1 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>MPA Monitoring Sheet</title>
 
+<style>
+body { font-family: Arial; margin: 20px; background:#f9fafc; }
+h2 { text-align:center; }
+
+.top-bar { margin-bottom:15px; display:flex; gap:10px; flex-wrap:wrap; }
+
+button {
+    padding:6px 12px;
+    cursor:pointer;
+    border:none;
+    background:#007bff;
+    color:white;
+    border-radius:4px;
+}
+button:hover { background:#0056b3; }
+
+.delete-btn { background:#dc3545; }
+.delete-btn:hover { background:#a71d2a; }
+
+table { border-collapse:collapse; width:100%; background:white; }
+
+th, td {
+    border:1px solid #ccc;
+    padding:6px;
+    text-align:center;
+}
+
+th { background:#f1f1f1; position:sticky; top:0; }
+
+td input {
+    width:100%;
+    border:none;
+    text-align:center;
+}
+
+.total-cell {
+    font-weight:bold;
+    background:#eef6ff;
+}
+
+.mpa-section {
+    margin-top:15px;
+    font-weight:bold;
+    font-size:18px;
+    display:flex;
+    gap:10px;
+    align-items:center;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Client Monitoring Sheet</h2>
+
+<div class="top-bar">
+    <button onclick="addRow()">Add Row</button>
+    <button onclick="mergeDuplicates()">Merge Duplicates</button>
+    <button onclick="saveData()">Save</button>
+    <button onclick="downloadCSV()">Download</button>
+    <button onclick="window.print()">Print</button>
+    <input type="text" id="search" placeholder="Search Customer #" onkeyup="searchTable()">
+</div>
+
+<table id="dataTable">
+<thead>
+<tr>
+<th>Customer #</th>
+<th>Pawning</th>
+<th>Care Product</th>
+<th>CTPL</th>
+<th>Microsavings</th>
+<th>Domestic</th>
+<th>International</th>
+<th>Loan</th>
+<th>Bills Payment</th>
+<th>GCash</th>
+<th>E-Load</th>
+<th>Collection</th>
+<th>Subscription</th>
+<th>Total</th>
+<th>Delete</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<div class="mpa-section">
+MPA Ratio (Total Products ÷ Clients with Customer #):
+<span id="mpaRatio">0.00</span>
+<button onclick="calculateMPA()">Calculate</button>
+</div>
+
+<script>
+
+function createNumberInput(value, row) {
+    let input = document.createElement("input");
+    input.type = "number";
+    input.min = 0;
+    input.max = 1;
+    input.step = 1;
+    input.value = value || 0;
+
+    input.onfocus = function() {
+        if (this.value == 0) this.value = "";
+    };
+
+    input.oninput = function() {
+        if (this.value > 1) this.value = 1;
+        if (this.value < 0) this.value = 0;
+        if (this.value !== "1" && this.value !== "0" && this.value !== "") {
+            this.value = 1;
+        }
+        calculateRowTotal(row);
+    };
+
+    input.onblur = function() {
+        if (this.value === "") this.value = 0;
+    };
+
+    return input;
+}
+
+function addRow(data = []) {
+    let table = document.getElementById("dataTable").getElementsByTagName('tbody')[0];
+    let row = table.insertRow();
+
+    for (let i = 0; i < 15; i++) {
+        let cell = row.insertCell();
+        let input;
+
+        if (i === 0) {
+            input = document.createElement("input");
+            input.type = "text";
+            input.value = data[i] || "";
+        } 
+        else if (i === 13) {
+            input = document.createElement("input");
+            input.type = "number";
+            input.readOnly = true;
+            input.className = "total-cell";
+        } 
+        else if (i === 14) {
+            let deleteBtn = document.createElement("button");
+            deleteBtn.innerText = "Delete";
+            deleteBtn.className = "delete-btn";
+            deleteBtn.onclick = function() {
+                row.remove();
+                calculateMPA();
+            };
+            cell.appendChild(deleteBtn);
+            continue;
+        }
+        else {
+            input = createNumberInput(data[i], row);
+        }
+
+        cell.appendChild(input);
+    }
+
+    calculateRowTotal(row);
+}
+
+function calculateRowTotal(row) {
+    let total = 0;
+    for (let c = 1; c < 13; c++) {
+        total += parseInt(row.cells[c].children[0].value) || 0;
+    }
+    row.cells[13].children[0].value = total;
+}
+
+function mergeDuplicates() {
+    let tbody = document.getElementById("dataTable").getElementsByTagName('tbody')[0];
+    let rows = Array.from(tbody.rows);
+    let clientMap = {};
+
+    rows.forEach(row => {
+        let customer = row.cells[0].children[0].value.trim();
+        if (customer === "") return;
+
+        if (!clientMap[customer]) {
+            clientMap[customer] = row;
+        } else {
+            let existingRow = clientMap[customer];
+
+            for (let c = 1; c < 13; c++) {
+                let val1 = parseInt(existingRow.cells[c].children[0].value) || 0;
+                let val2 = parseInt(row.cells[c].children[0].value) || 0;
+                existingRow.cells[c].children[0].value = (val1 + val2) > 0 ? 1 : 0;
+            }
+
+            calculateRowTotal(existingRow);
+            row.remove();
+        }
+    });
+
+    calculateMPA();
+    alert("Duplicates merged successfully!");
+}
+
+function calculateMPA() {
+    let rows = document.getElementById("dataTable").getElementsByTagName('tbody')[0].rows;
+    let totalProducts = 0;
+    let validClients = 0;
+
+    for (let r = 0; r < rows.length; r++) {
+        let customerNumber = rows[r].cells[0].children[0].value.trim();
+        if (customerNumber !== "") {
+            validClients++;
+            totalProducts += parseInt(rows[r].cells[13].children[0].value) || 0;
+        }
+    }
+
+    let mpa = validClients ? (totalProducts / validClients) : 0;
+    document.getElementById("mpaRatio").innerText = mpa.toFixed(2);
+
+    autoSave();
+}
+
+function searchTable() {
+    let input = document.getElementById("search").value.toLowerCase();
+    let rows = document.getElementById("dataTable").getElementsByTagName('tbody')[0].rows;
+
+    for (let r = 0; r < rows.length; r++) {
+        let customer = rows[r].cells[0].children[0].value.toLowerCase();
+        rows[r].style.display = customer.includes(input) ? "" : "none";
+    }
+}
+
+function saveData() { autoSave(); alert("Saved!"); }
+
+function autoSave() {
+    let data = [];
+    let rows = document.getElementById("dataTable").getElementsByTagName('tbody')[0].rows;
+    for (let r = 0; r < rows.length; r++) {
+        let rowData = [];
+        for (let c = 0; c < 14; c++) {
+            rowData.push(rows[r].cells[c].children[0]?.value || "");
+        }
+        data.push(rowData);
+    }
+    localStorage.setItem("mpaData", JSON.stringify(data));
+}
+
+function loadData() {
+    let saved = localStorage.getItem("mpaData");
+    if (saved) {
+        let data = JSON.parse(saved);
+        data.forEach(row => addRow(row));
+    }
+}
+
+window.onload = loadData;
+
+</script>
+
+</body>
+</html>
